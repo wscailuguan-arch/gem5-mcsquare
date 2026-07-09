@@ -88,9 +88,17 @@ cast_stat_info(const statistics::Info *info)
 namespace statistics
 {
 
+// These run from StatEvent::process(), i.e. from inside a GlobalEvent barrier,
+// on whichever event-queue thread happened to arrive last. simulate() releases
+// the GIL for the whole sim loop (see src/python/pybind11/event.cc), so take it
+// back before touching the interpreter. Without this, pybind11 3.0 throws
+// "PyGILState_Check() failure" whenever a dump or reset lands on a worker
+// thread, which with -n 8 happens at random.
+
 void
 pythonDump()
 {
+    py::gil_scoped_acquire gil;
     py::module_ m = py::module_::import("m5.stats");
     m.attr("dump")();
 }
@@ -98,6 +106,7 @@ pythonDump()
 void
 pythonReset()
 {
+    py::gil_scoped_acquire gil;
     py::module_ m = py::module_::import("m5.stats");
     m.attr("reset")();
 }

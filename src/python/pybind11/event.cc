@@ -105,8 +105,24 @@ pybind_init_event(py::module_ &m_native)
 {
     py::module_ m = m_native.def_submodule("event");
 
+    // Drop the GIL for the duration of the simulation loop. With more than one
+    // event queue (m5.options.num_cpus > 1 puts each KVM vCPU on its own queue)
+    // the sim loop runs on several threads, and a GlobalEvent's barrier is
+    // executed by whichever thread arrives last. StatEvent::process() calls back
+    // into Python via pythonDump()/pythonReset(); if that lands on a worker
+    // thread while the main thread sits inside the barrier holding the GIL,
+    // pybind11 3.0 throws "PyGILState_Check() failure" and gem5 aborts. This is
+    // nondeterministic: whether an m5_dump_stats survives depends on which queue
+    // reaches the barrier last. pybind11 2.8.1 (gem5 v22.1) had no such check,
+    // which is why the (MC)^2 artifact never hit it.
+    //
+    // Releasing here is safe: the other C++ -> Python callback from the sim loop
+    // is PyEvent::process(), and pybind11's PYBIND11_OVERRIDE_IMPL macro already
+    // takes a gil_scoped_acquire of its own. pythonDump()/pythonReset() acquire
+    // it explicitly (see src/python/pybind11/stats.cc).
     m.def("simulate", &simulate,
-          py::arg("ticks") = MaxTick);
+          py::arg("ticks") = MaxTick,
+          py::call_guard<py::gil_scoped_release>());
     m.def("setMaxTick", &set_max_tick, py::arg("tick"));
     m.def("getMaxTick", &get_max_tick, py::return_value_policy::copy);
     m.def("terminateEventQueueThreads", &terminateEventQueueThreads);
