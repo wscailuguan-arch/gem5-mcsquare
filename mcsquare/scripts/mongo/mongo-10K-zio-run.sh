@@ -4,6 +4,11 @@ ZIO=/home/akkamath/zio-mongo/tas/
 ZIO_BIN=${ZIO}/lib/copy_interpose.so
 
 pushd ${ZIO}
+# gem5's x86 O3 decoder implements no AVX/AVX2. This tree builds with
+# -march=native, and under KVM the guest sees the host CPU, so gcc emits
+# vpbroadcastq/ymm and the detailed CPU aborts on an invalid opcode. Force the
+# build down to SSE. (-mno-avx2 alone still leaves 256-bit AVX-FP ymm uses.)
+sed -i 's/-mno-avx512f/-mno-avx512f -mno-avx2 -mno-avx/' Makefile
 make PSIZE=16384
 popd
 
