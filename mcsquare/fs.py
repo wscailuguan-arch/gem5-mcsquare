@@ -193,17 +193,6 @@ def build_test_system(np):
         for i in range(np)
     ]
 
-    # (MCSquare v25 / WSL) Skip perf on the KVM fast-forward CPU. Hardware perf
-    # does not work under WSL2 (guest reports "Broken PMU hardware detected"),
-    # and the per-KVM-quantum perf syscalls (read/start/stop x8 vCPUs) stall
-    # forward progress to a standstill at guest idle. Time still advances via
-    # the KVM timer -> next-event jump (base.cc tick()), and the measured
-    # results come from gem5's own stats during the O3 phase, so the guest perf
-    # counters are not needed here.
-    if ObjectList.is_kvm_cpu(TestCPUClass):
-        for c in test_sys.cpu:
-            c.usePerf = False
-
     if args.ruby:
         bootmem = getattr(test_sys, '_bootmem', None)
         Ruby.create_system(
@@ -289,12 +278,7 @@ def build_test_system(np):
             # all devices.
             for obj in cpu.descendants():
                 obj.eventq_index = 0
-            # 2026-07-08: single-CPU (-n 1) -> keep the CPU on eventq 0 (main thread) so
-            # numMainEventQueues stays 1 = the whole sim is single-threaded = the stats
-            # dump runs on the GIL-holding main thread, dodging the pybind11 GIL abort
-            # that hits gem5.debug when dump lands on a GIL-less KVM worker thread.
-            # Multi-CPU keeps per-vCPU queues (i+1) for parallel KVM vCPUs.
-            cpu.eventq_index = 0 if len(test_sys.cpu) == 1 else (i + 1)
+            cpu.eventq_index = i + 1
         test_sys.kvm_vm = KvmVM()
 
     return test_sys
@@ -374,26 +358,6 @@ args = parser.parse_args()
 
 # system under test can be any CPU
 (TestCPUClass, test_mem_mode, FutureClass) = Simulation.setCPUClass(args)
-# (MCSquare v25 / WSL fallback) KVM is unusable on this WSL2: the host exposes no
-# hardware PMU (perf cycles = <not supported>), so gem5-KVM cannot measure guest
-# cycles to advance simulated time -> it stalls (perf-on = too-slow syscalls hang
-# boot; usePerf=False = broken time advance hangs the compile). Fall back to the
-# standard fast-forward path: with --fast-forward, setCPUClass(args) above already
-# returned (AtomicSimpleCPU, 'atomic', O3CPU) -> boot/compile run on the
-# deterministic AtomicSimpleCPU (no PMU needed), then switch to O3 on the script's
-# first `m5 exit`. The measured phase is O3 either way, so results are unchanged.
-# 2026-07-06: test binaries are now PRE-COMPILED into the image (chroot bake), so
-# the in-guest compile that used to hang KVM is gone. KVM(usePerf=False) already
-# boots fine (Phase 7e: it only stalled at compile), so re-enable it for a fast
-# boot -> O3 switch. To fall back to Atomic (slow but PMU-free), re-comment the line
-# below.
-# 2026-07-07: commented out to fall back to Atomic FF (from setCPUClass above) ->
-# isolate whether the O3 Decode::sortInsts segfault is an O3 bug or a KVM->O3 switch bug.
-# 2026-07-08: re-enabled KVM (fast boot). The pybind11 GIL assert that made KVM's
-# multi-thread stats dump abort under gem5.debug has been disabled directly in
-# ext/pybind11/include/pybind11/cast.h (#if 0), replicating the paper's opt-build
-# behavior, so KVM's GIL-less worker-thread pythonDump() no longer aborts. usePerf=False
-# (above) keeps KVM usable without a host PMU. On real HW: revert cast.h + use opt build.
 TestCPUClass, test_mem_mode = Simulation.getCPUClass('X86KvmCPU')
 
 # Match the memories with the CPUs, based on the options for the test system

@@ -1302,16 +1302,16 @@ void
 BaseKvmCPU::setupCounters()
 {
     DPRINTF(Kvm, "Attaching cycle counter...\n");
-    PerfKvmCounterConfig cfgCycles(PERF_TYPE_SOFTWARE,
-                                PERF_COUNT_SW_CPU_CLOCK);
+    PerfKvmCounterConfig cfgCycles(PERF_TYPE_HARDWARE,
+                                PERF_COUNT_HW_CPU_CYCLES);
     cfgCycles.disabled(true)
         .pinned(true);
 
     // Try to exclude the host. We set both exclude_hv and
     // exclude_host since different architectures use slightly
     // different APIs in the kernel.
-    cfgCycles.exclude_hv(false)
-        .exclude_host(false);
+    cfgCycles.exclude_hv(true)
+        .exclude_host(true);
 
     if (perfControlledByTimer) {
         // We need to configure the cycles counter to send overflows
@@ -1393,14 +1393,14 @@ BaseKvmCPU::setupInstCounter(uint64_t period)
         return;
     }
 
-    PerfKvmCounterConfig cfgInstructions(PERF_TYPE_SOFTWARE,
-                                         PERF_COUNT_SW_TASK_CLOCK);
+    PerfKvmCounterConfig cfgInstructions(PERF_TYPE_HARDWARE,
+                                         PERF_COUNT_HW_INSTRUCTIONS);
 
     // Try to exclude the host. We set both exclude_hv and
     // exclude_host since different architectures use slightly
     // different APIs in the kernel.
-    cfgInstructions.exclude_hv(false)
-        .exclude_host(false);
+    cfgInstructions.exclude_hv(true)
+        .exclude_host(true);
 
     if (period) {
         // Setup a sampling counter if that has been requested.

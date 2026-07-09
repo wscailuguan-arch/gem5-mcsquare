@@ -694,13 +694,8 @@ if env['GCC']:
     # opt and fast share the same cc flags, also add the optimization to the
     # linkflags as LTO defers the optimization to link time
     for target in ['opt', 'fast']:
-        # WSL/GCC16 workaround: gcc 16 miscompiles gem5 at -O3 (garbage
-        # TimeBuffer reads -> o3 sortInsts SIGSEGV; ActivityRecorder
-        # activityCount < 0 assert; etc.). gem5 officially supports gcc <= 14.2;
-        # this machine only has gcc 16. -O1 avoids the aggressive opts that
-        # miscompile. Restore -O3 on a supported toolchain (native/cloud).
-        envs[target].Append(CCFLAGS=['-O1', '${LTO_CCFLAGS}'])
-        envs[target].Append(LINKFLAGS=['-O1', '${LTO_LINKFLAGS}'])
+        envs[target].Append(CCFLAGS=['-O3', '${LTO_CCFLAGS}'])
+        envs[target].Append(LINKFLAGS=['-O3', '${LTO_LINKFLAGS}'])
 
 elif env['CLANG']:
     envs['debug'].Append(CCFLAGS=['-g', '-O0'])

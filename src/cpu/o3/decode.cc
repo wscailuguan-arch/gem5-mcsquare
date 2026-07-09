@@ -41,8 +41,6 @@
 
 #include "cpu/o3/decode.hh"
 
-#include <cstdio>
-
 #include "arch/generic/pcstate.hh"
 #include "base/trace.hh"
 #include "cpu/inst_seq.hh"
@@ -485,22 +483,7 @@ Decode::updateStatus()
 void
 Decode::sortInsts()
 {
-    static int mcsq_callno = 0;
     int insts_from_fetch = fromFetch->size;
-    if (mcsq_callno < 80) {
-        fprintf(stderr, "MCSQ_SORT call=%d cpu=%s tick=%lu wire=%p size=%d\n",
-                mcsq_callno, cpu->name().c_str(), (unsigned long)curTick(),
-                (void *)&(*fromFetch), insts_from_fetch);
-        fflush(stderr);
-    }
-    mcsq_callno++;
-    if (insts_from_fetch < 0 || insts_from_fetch > gem5::o3::MaxWidth) {
-        fprintf(stderr, "MCSQ_SORT   BADSIZE=%d cpu=%s tick=%lu (skipping)\n",
-                insts_from_fetch, cpu->name().c_str(),
-                (unsigned long)curTick());
-        fflush(stderr);
-        return;
-    }
     for (int i = 0; i < insts_from_fetch; ++i) {
         insts[fromFetch->insts[i]->threadNumber].push(fromFetch->insts[i]);
     }
