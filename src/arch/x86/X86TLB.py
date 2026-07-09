@@ -56,7 +56,11 @@ class X86TLB(BaseTLB):
     cxx_class = "gem5::X86ISA::TLB"
     cxx_header = "arch/x86/tlb.hh"
 
-    size = Param.Unsigned(64, "TLB size")
+    # MCSquare: the artifact raises this from upstream's 64 to 1024. Its
+    # microbenchmarks stream through multi-megabyte buffers, and zIO's page
+    # remapping makes the workload TLB-heavy; a 64-entry TLB penalises both far
+    # more than the paper's configuration does. See PAPER-REPRO-MAP.md.
+    size = Param.Unsigned(1024, "TLB size")
     system = Param.System(Parent.any, "system object")
     walker = Param.X86PagetableWalker(
         X86PagetableWalker(), "page table walker"

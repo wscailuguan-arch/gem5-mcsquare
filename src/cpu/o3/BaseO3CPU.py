@@ -139,8 +139,14 @@ class BaseO3CPU(BaseCPU):
         5, "Time buffer size for forward communication"
     )
 
-    LQEntries = Param.Unsigned(32, "Number of load queue entries")
-    SQEntries = Param.Unsigned(32, "Number of store queue entries")
+    # MCSquare: the artifact doubles both from upstream's 32 to 64. This is not
+    # cosmetic. memcpy_lazy issues one CLWB per cacheline, and the paper (V-A1)
+    # attributes (MC)^2's large-copy overhead to exactly these queues filling:
+    # "Above 1KB, these operations serialize due to the CPU load/store queue and
+    # ROB becoming full." Halving the store queue halves the number of CLWBs in
+    # flight and roughly halves (MC)^2's large-copy speedup.
+    LQEntries = Param.Unsigned(64, "Number of load queue entries")
+    SQEntries = Param.Unsigned(64, "Number of store queue entries")
     LSQDepCheckShift = Param.Unsigned(
         4, "Number of places to shift addr before check"
     )
