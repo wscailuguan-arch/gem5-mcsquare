@@ -53,6 +53,7 @@
 #include "debug/LSQUnit.hh"
 #include "mem/packet.hh"
 #include "mem/request.hh"
+#include "mem/mcsquare.h"
 
 namespace gem5
 {
@@ -820,7 +821,8 @@ LSQUnit::writebackStores()
            storeWBIt.dereferenceable() &&
            storeWBIt->valid() &&
            storeWBIt->canWB() &&
-           ((!needsTSO) || (!storeInFlight)) &&
+           ((!needsTSO) || (!storeInFlight) ||
+           storeWBIt->request()->mainReq()->isSkipTSO()) &&
            lsq->cachePortAvailable(false)) {
 
         if (isStoreBlocked) {
@@ -1089,7 +1091,8 @@ LSQUnit::storePostSend()
         }
     }
 
-    if (needsTSO) {
+    if (needsTSO && !(storeWBIt->request() && storeWBIt->request()->mainReq() &&
+                      storeWBIt->request()->mainReq()->isSkipTSO()) ) {
         storeInFlight = true;
     }
 
@@ -1203,7 +1206,8 @@ LSQUnit::completeStore(typename StoreQueue::iterator store_idx)
 
     store_inst->setCompleted();
 
-    if (needsTSO) {
+    if (needsTSO && !(store_idx->request() && store_idx->request()->mainReq() &&
+                      store_idx->request()->mainReq()->isSkipTSO())) {
         storeInFlight = false;
     }
 
@@ -1647,10 +1651,12 @@ LSQUnit::write(LSQRequest *request, uint8_t *data, ssize_t store_idx)
     bool store_no_data =
         request->mainReq()->getFlags() & Request::STORE_NO_DATA;
     storeQueue[store_idx].isAllZeros() = store_no_data;
-    assert(size <= SQEntry::DataSize || store_no_data);
+    assert(size <= SQEntry::DataSize || store_no_data ||
+        isMCSquare(request->mainReq()));
 
     // copy data into the storeQueue only if the store request has valid data
     if (!(request->req()->getFlags() & Request::CACHE_BLOCK_ZERO) &&
+        !(isMCSquare(request->req())) &&
         !request->req()->isCacheMaintenance() &&
         !request->req()->isAtomic())
         memcpy(storeQueue[store_idx].data(), data, size);

@@ -54,6 +54,7 @@
 #include "base/debug.hh"
 #include "base/output.hh"
 #include "cpu/base.hh"
+#include "cpu/exec_context.hh"
 #include "cpu/thread_context.hh"
 #include "debug/Loader.hh"
 #include "debug/Quiesce.hh"
@@ -486,6 +487,41 @@ triggerWorkloadEvent(ThreadContext *tc)
 {
     DPRINTF(PseudoInst, "pseudo_inst::triggerWorkloadEvent()\n");
     tc->getSystemPtr()->workload->event(tc);
+}
+
+Fault
+memcpy_elide(ThreadContext *tc, ExecContext *xc,
+             Addr dest, Addr src, uint64_t len)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide(dest = 0x%lx, src = 0x%lx, "
+        "len = %ld)\n", dest, src, len);
+    if (!tc->getSystemPtr()->isTimingMode()) {
+        fatal("To exeute memcpy_elide we require the memory system to be in "
+              "'timing' mode.\n");
+    }
+    Fault f = xc->writeMem((uint8_t*)src, len, dest,
+        Request::MEM_ELIDE, NULL,
+        std::vector<bool>(len, true));
+    if(f != NoFault)
+        DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide fault: %s\n", f->name());
+
+    return f;
+}
+
+Fault
+memcpy_elide_free(ThreadContext *tc, ExecContext *xc, Addr dest, uint64_t len)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide_free(dest = 0x%lx, "
+        "len = %ld)\n", dest, len);
+    if (!tc->getSystemPtr()->isTimingMode()) {
+        fatal("To exeute memcpy_elide we require the memory system to be in "
+              "'timing' mode.\n");
+    }
+    Fault f = xc->writeMem(NULL, len, dest,
+        Request::MEM_ELIDE_FREE | Request::UNCACHEABLE, NULL,
+        std::vector<bool>(len, true));
+
+    return f;
 }
 
 //

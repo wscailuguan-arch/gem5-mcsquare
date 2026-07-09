@@ -2316,7 +2316,14 @@ unpacking_collector<policy> collect_arguments(Args &&...args) {
 template <typename Derived>
 template <return_value_policy policy, typename... Args>
 object object_api<Derived>::operator()(Args &&...args) const {
-#ifndef NDEBUG
+// (MCSquare v25 / WSL patch) Disabled pybind11's non-main-thread GIL assert. gem5's
+// pythonDump() (stats dump) runs on a non-main KVM worker thread without the GIL -- a
+// long-standing gem5 UB that the ISCA'24 paper's gem5.opt build silently tolerated,
+// because this assert is #ifndef NDEBUG (compiled out under NDEBUG). We are forced onto
+// gem5.debug (gcc16 miscompiles gem5.opt's O3), which enables the assert and aborts the
+// dump. Force it off to replicate the opt build's behavior. On real HW with an opt build
+// (gcc<=14.2), revert this (git checkout) -- the assert is off there anyway.
+#if 0
     if (!PyGILState_Check()) {
         pybind11_fail("pybind11::object_api<>::operator() PyGILState_Check() failure.");
     }

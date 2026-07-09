@@ -67,6 +67,8 @@ void m5_panic(void);
 void m5_work_begin(uint64_t workid, uint64_t threadid);
 void m5_work_end(uint64_t workid, uint64_t threadid);
 void m5_hypercall(uint64_t hypercall_id);
+void m5_memcpy_elide(void *dest, void *src, uint64_t len);
+void m5_memcpy_elide_free(void *dest, uint64_t len);
 /*
  * Send a very generic poke to the workload so it can do something. It's up to
  * the workload to know what information to look for to interpret an event,
@@ -88,6 +90,11 @@ void m5_workload();
                          __typeof__(name) M5OP_MERGE_TOKENS(name, _semi);
 M5OP_FOREACH
 #undef M5OP
+
+#define M5OP2(name, func) __typeof__(name) M5OP_MERGE_TOKENS(name, _addr); \
+                          __typeof__(name) M5OP_MERGE_TOKENS(name, _semi);
+M5OP2_FOREACH
+#undef M5OP2
 
 #ifdef __cplusplus
 }

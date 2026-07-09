@@ -446,7 +446,12 @@ AbstractMemory::access(PacketPtr pkt)
             trackLoadLocked(pkt);
         }
         if (pmemAddr) {
-            pkt->setData(host_addr);
+            if (pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+                pkt->setData(host_addr, pkt->mc_dest_offset,
+                             pkt->mc_src_offset, pkt->mc_size);
+            } else {
+                pkt->setData(host_addr);
+            }
         }
         TRACE_PACKET(pkt->req->isInstFetch() ? "IFetch" : "Read");
         if (collectStats) {

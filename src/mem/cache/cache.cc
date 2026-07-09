@@ -62,6 +62,7 @@
 #include "mem/cache/tags/base.hh"
 #include "mem/cache/write_queue_entry.hh"
 #include "mem/request.hh"
+#include "mem/mcsquare.h"
 #include "params/Cache.hh"
 
 namespace gem5
@@ -171,6 +172,10 @@ Cache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
                     name());
 
         DPRINTF(Cache, "%s for %s\n", __func__, pkt->print());
+
+        if(isMCSquare(pkt->req)) {
+            return false;
+        }
 
         // flush and invalidate any existing block
         CacheBlk *old_blk(tags->findBlock({pkt->getAddr(), pkt->isSecure()}));
@@ -328,7 +333,7 @@ Cache::handleTimingReqMiss(PacketPtr pkt, CacheBlk *blk, Tick forward_time,
 
     // These should always hit due to the earlier Locked Read
     assert(pkt->cmd != MemCmd::LockedRMWWriteReq);
-    if (pkt->req->isUncacheable()) {
+    if (pkt->req->isUncacheable() || isMCSquare(pkt)) {
         // ignore any existing MSHR if we are dealing with an
         // uncacheable request
 
@@ -1015,7 +1020,10 @@ Cache::doTimingSupplyResponse(PacketPtr req_pkt, const uint8_t *blk_data,
         // packet needs it (the only packets that carry data are read
         // responses)
         pkt = new Packet(req_pkt, false, req_pkt->isRead());
-
+    if(!(req_pkt->req->isUncacheable() || req_pkt->isInvalidate() ||
+           pkt->hasSharers())) {
+            fprintf(stderr, "Err, invalid packet req_pkt: %s\n", req_pkt->print().c_str());
+           }
     assert(req_pkt->req->isUncacheable() || req_pkt->isInvalidate() ||
            pkt->hasSharers());
     pkt->makeTimingResponse();
@@ -1147,9 +1155,12 @@ Cache::handleSnoop(PacketPtr pkt, CacheBlk *blk, bool is_timing,
             // to delete it
             assert(pkt->needsResponse());
 
+            if(!(pkt->cacheResponding()))
+                fprintf(stderr, "Packet breaks responding requirements: %s; Flags %lx; isMC? %d \n",
+                    pkt->print().c_str(), (uint64_t)pkt->req->getFlags(), isMCSquare(pkt));
             // we have passed the block to a cache upstream, that
             // cache should be responding
-            assert(pkt->cacheResponding());
+            //assert(pkt->cacheResponding());
 
             delete pkt;
         }

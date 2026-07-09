@@ -45,6 +45,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "debug/SnoopFilter.hh"
+#include "mem/mcsquare.h"
 #include "sim/system.hh"
 
 namespace gem5
@@ -345,7 +346,8 @@ SnoopFilter::updateResponse(const Packet* cpkt, const ResponsePort&
 
     // we only allocate if the packet actually came from a cache, but
     // start by checking if the port is snooping
-    if (cpkt->req->isUncacheable() || !cpu_side_port.isSnooping())
+    if (cpkt->req->isUncacheable() || !cpu_side_port.isSnooping() ||
+        isMCSquare(cpkt))
         return;
 
     // next check if we actually allocated an entry

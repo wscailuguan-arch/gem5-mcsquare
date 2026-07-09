@@ -160,6 +160,16 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
 
     // determine the destination based on the destination address range
     PortID mem_side_port_id = findPort(pkt);
+    // If MCSquare, then port will not be found for multi-channel setups.
+    // Manually find an appropriate port for such a case
+    if (isMCSquare(pkt)) {
+        for (auto i = portMap.begin(); i != portMap.end(); ++i) {
+            if (i->first.contains(pkt->getAddr())) {
+                mem_side_port_id = i->second;
+                break;
+            }
+        }
+    }
 
     // test if the crossbar should be considered occupied for the current
     // port, and exclude express snoops from the check
@@ -197,7 +207,8 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
     const bool is_destination = isDestination(pkt);
 
     const bool snoop_caches = !system->bypassCaches() &&
-        pkt->cmd != MemCmd::WriteClean;
+        pkt->cmd != MemCmd::WriteClean &&
+        !isMCSquare(pkt);
     if (snoop_caches) {
         assert(pkt->snoopDelay == 0);
 
@@ -289,8 +300,41 @@ CoherentXBar::recvTimingReq(PacketPtr pkt, PortID cpu_side_port_id)
                 pkt->clearWriteThrough();
             }
 
+            bool allowed = true;
+            // Forward MCSquare packets to all memctrls
+            if (isMCSquare(pkt) && name() == "system.membus") {
+                // First check if memctrl can accept lazy copy request
+                // The value 101 is so that memctrl knows this is just a check
+                pkt->mc_dest_offset = 101;
+                for (auto i = portMap.begin(); i != portMap.end(); ++i) {
+                    if (pkt->getAddrRange().isSubset(
+                            AddrRange(i->first.start(), i->first.end())))
+                        if (i->second != mem_side_port_id) {
+                            allowed =
+                                memSidePorts[i->second]->sendTimingReq(pkt);
+                            if (!allowed)
+                                break;
+                        }
+                }
+                // Let owner memctrl also check. Inform it of prior check value
+                pkt->mc_dest_offset = 100 + (allowed ? 1 : 0);
+                allowed = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+                // If no issues, formally issue request
+                pkt->mc_dest_offset = 0;
+                if (allowed) {
+                    for (auto i = portMap.begin(); i != portMap.end(); ++i) {
+                        if (pkt->getAddrRange().isSubset(
+                                AddrRange(i->first.start(), i->first.end())))
+                            if (i->second != mem_side_port_id) {
+                                memSidePorts[i->second]->sendTimingReq(pkt);
+                            }
+                    }
+                } else
+                    success = false;
+            }
             // since it is a normal request, attempt to send the packet
-            success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
+            if (allowed)
+                success = memSidePorts[mem_side_port_id]->sendTimingReq(pkt);
         } else {
             // no need to forward, turn this packet around and respond
             // directly
@@ -448,6 +492,77 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
 {
     // determine the source port based on the id
     RequestPort *src_port = memSidePorts[mem_side_port_id];
+
+    if (pkt->req->getFlags() & Request::MEM_ELIDE_DEST_WB && pkt->isWrite()) {
+        pkt->cmd = pkt->makeWriteCmd(pkt->req);
+        PortID new_mem_side_port_id = findPort(pkt->getAddrRange());
+        bool success = memSidePorts[new_mem_side_port_id]->sendTimingReq(pkt);
+        DPRINTF(MCSquare, "Forwarding write generated for %lx\n",
+                pkt->getAddr());
+        if (success) {
+            auto req = std::make_shared<Request>(pkt->getAddr(),
+                pkt->getSize(), Request::MEM_ELIDE_DEST_WB,
+                pkt->req->funcRequestorId);
+            auto broadcastPkt = Packet::createWrite(req);
+            broadcastPkt->allocate();
+            broadcastPkt->setData(pkt->getPtr<uint8_t>());
+            // Write response which modified elision table.
+            // Forward to all memctrls.
+            for (auto i = portMap.begin(); i != portMap.end(); ++i) {
+                if (pkt->getAddrRange().isSubset(
+                        AddrRange(i->first.start(), i->first.end())))
+                    if (i->second != new_mem_side_port_id)
+                        memSidePorts[i->second]->sendTimingReq(broadcastPkt);
+            }
+            delete broadcastPkt;
+        } else
+            delete pkt;
+        return true;
+    }
+
+    if (pkt->req->getFlags() & Request::MEM_ELIDE_REDIRECT_SRC) {
+        if (pkt->isRead())
+            pkt->cmd = pkt->makeReadCmd(pkt->req);
+        else if (pkt->isWrite())
+            pkt->cmd = pkt->makeWriteCmd(pkt->req);
+
+        if (pkt->req->_paddr_dest == 100) {
+            pkt->req->_paddr_dest = 0;
+            pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
+        }
+
+        // store the old header delay so we can restore it if needed
+        Tick old_header_delay = pkt->headerDelay;
+
+        // a request sees the frontend and forward latency
+        Tick xbar_delay = (frontendLatency + forwardLatency) * clockPeriod();
+
+        // set the packet header and payload delay
+        calcPacketTiming(pkt, xbar_delay);
+
+        // determine the destination based on the destination address range
+        PortID mem_side_port_id_new = findPort(pkt->getAddrRange());
+        if (pkt->isWrite()) {
+            // First broadcast to all ports to update the CTT
+            for (auto i = portMap.begin(); i != portMap.end(); ++i) {
+                if (pkt->getAddrRange().isSubset(
+                        AddrRange(i->first.start(), i->first.end())))
+                    if (i->second != mem_side_port_id_new)
+                        memSidePorts[i->second]->sendTimingReq(pkt);
+            }
+        }
+        // Now since it is a normal request, attempt to send the packet
+        bool success = memSidePorts[mem_side_port_id_new]->sendTimingReq(pkt);
+        if (!success) {
+            DPRINTF(MCSquare, "Found bounce packet for dest %lx, read? %d, "
+                    "write? %d, addr %lx\n", pkt->req->_paddr_dest,
+                    pkt->isRead(), pkt->isWrite(), pkt->getAddr());
+            // TODO_AK: Deal with this case.
+            assert(false);
+            pkt->headerDelay = old_header_delay;
+        }
+        return success;
+    }
 
     // determine the destination
     const auto route_lookup = routeTo.find(pkt->req);

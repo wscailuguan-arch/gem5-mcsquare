@@ -48,6 +48,7 @@
 #include "base/logging.hh"
 #include "base/trace.hh"
 #include "base/types.hh" // For Tick and Addr data types.
+#include "cpu/exec_context.hh"
 #include "cpu/thread_context.hh"
 #include "debug/PseudoInst.hh"
 #include "sim/guest_abi.hh"
@@ -114,6 +115,10 @@ void m5Syscall(ThreadContext *tc);
 void togglesync(ThreadContext *tc);
 void triggerWorkloadEvent(ThreadContext *tc);
 void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
+Fault memcpy_elide(ThreadContext *tc, ExecContext *xc,
+                      Addr dest, Addr src, uint64_t len);
+Fault memcpy_elide_free(ThreadContext *tc, ExecContext *xc,
+                      Addr dest, uint64_t len);
 
 /**
  * Execute a decoded M5 pseudo instruction
@@ -130,7 +135,8 @@ void m5Hypercall(ThreadContext *tc, uint64_t hypercall_id);
 
 template <typename ABI, bool store_ret>
 bool
-pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
+pseudoInstWork(ThreadContext *tc, uint8_t func,
+               uint64_t &result, ExecContext *xc)
 {
     DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
 
@@ -234,8 +240,6 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
         return true;
 
       case M5OP_RESERVED1:
-      case M5OP_RESERVED2:
-      case M5OP_RESERVED3:
       case M5OP_RESERVED4:
       case M5OP_RESERVED5:
         warn("Unimplemented m5 op (%#x)\n", func);
@@ -261,17 +265,38 @@ pseudoInstWork(ThreadContext *tc, uint8_t func, uint64_t &result)
 
 template <typename ABI, bool store_ret=false>
 bool
-pseudoInst(ThreadContext *tc, uint8_t func, uint64_t &result)
+pseudoInst(ThreadContext *tc, uint8_t func,
+           uint64_t &result, ExecContext *xc = NULL)
 {
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    return pseudoInstWork<ABI, store_ret>(tc, func, result, xc);
 }
 
 template <typename ABI, bool store_ret=true>
 bool
-pseudoInst(ThreadContext *tc, uint8_t func)
+pseudoInst(ThreadContext *tc, uint8_t func, ExecContext *xc = NULL)
 {
     uint64_t result;
-    return pseudoInstWork<ABI, store_ret>(tc, func, result);
+    return pseudoInstWork<ABI, store_ret>(tc, func, result, xc);
+}
+
+template <typename ABI, bool store_ret=false>
+bool
+MemElideInst(ThreadContext *tc, uint8_t func,
+           Fault &fault, ExecContext *xc = NULL)
+{
+    DPRINTF(PseudoInst, "pseudo_inst::pseudoInst(%i)\n", func);
+
+    switch (func) {
+      case M5OP_MC2:
+        fault = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide);
+        return true;
+      case M5OP_MCFREE:
+        fault = invokeSimcall<ABI, store_ret>(tc, xc, memcpy_elide_free);
+        return true;
+      default:
+        warn("Unhandled m5 op: %#x\n", func);
+        return false;
+    }
 }
 
 } // namespace pseudo_inst

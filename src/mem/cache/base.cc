@@ -61,6 +61,7 @@
 #include "mem/cache/tags/compressed_tags.hh"
 #include "mem/cache/tags/partitioning_policies/partition_manager.hh"
 #include "mem/cache/tags/super_blk.hh"
+#include "mem/mcsquare.h"
 #include "params/BaseCache.hh"
 #include "params/WriteAllocator.hh"
 #include "sim/cur_tick.hh"
@@ -357,7 +358,8 @@ BaseCache::handleTimingReqMiss(PacketPtr pkt, MSHR *mshr, CacheBlk *blk,
                                Tick forward_time, Tick request_time)
 {
     if (writeAllocator &&
-        pkt && pkt->isWrite() && !pkt->req->isUncacheable()) {
+        pkt && pkt->isWrite() && !pkt->req->isUncacheable() &&
+        !(isMCSquare(pkt))) {
         writeAllocator->updateMode(pkt->getAddr(), pkt->getSize(),
                                    pkt->getBlockAddr(blkSize));
     }
@@ -558,7 +560,8 @@ BaseCache::recvTimingResp(PacketPtr pkt)
     // if this is a write, we should be looking at an uncacheable
     // write
     if (pkt->isWrite() && pkt->cmd != MemCmd::LockedRMWWriteResp) {
-        assert(pkt->req->isUncacheable());
+        assert(pkt->req->isUncacheable() ||
+               isMCSquare(pkt));
         handleUncacheableWriteResp(pkt);
         return;
     }
@@ -1304,6 +1307,19 @@ BaseCache::access(PacketPtr pkt, CacheBlk *&blk, Cycles &lat,
     DPRINTF(Cache, "%s for %s %s\n", __func__, pkt->print(),
             blk ? "hit " + blk->print() : "miss");
 
+    // If MCSquare operation, invalidate entries
+    // If used properly, this should have been preceeded by a flush op,
+    // so we don't have to worry about the data
+    if(isMCSquare(pkt->req)) {
+        // Invalidate destination addresses
+        /*for(int i = 0; i < pkt->req->getSize(); i += blkSize) {
+            CacheBlk *blk = tags->findBlock(pkt->getAddr() + i, pkt->isSecure());
+            if(blk)
+                invalidateBlock(blk);
+        }*/
+        return false;
+    }
+
     if (pkt->req->isCacheMaintenance()) {
         // A cache maintenance operation is always forwarded to the
         // memory below even if the block is found in dirty state.
@@ -2048,6 +2064,15 @@ BaseCache::sendWriteQueuePacket(WriteQueueEntry* wq_entry)
         // it gets retried
         return true;
     } else {
+        if(isMCSquare(tgt_pkt)) {
+            // Invalidate destination addresses
+            for(int i = 0; i < tgt_pkt->req->getSize(); i += blkSize) {
+                CacheBlk *blk = tags->findBlock(
+                    {tgt_pkt->getAddr() + i, tgt_pkt->isSecure()});
+                if(blk)
+                    invalidateBlock(blk);
+            }
+        }
         markInService(wq_entry);
         return false;
     }

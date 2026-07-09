@@ -642,10 +642,14 @@ let {{
         microopClasses[name] = StoreOp
 
     defineMicroStoreOp('St', 'Mem = PData;')
+    defineMicroStoreOp('Ntst', 'Mem = PData;',
+                       mem_flags="Request::UNCACHEABLE | Request::NO_TSO")
     defineMicroStoreOp('Stis', 'Mem = PData;')
     defineMicroStoreOp('Stul', 'Mem = PData;', mem_flags="Request::LOCKED_RMW")
 
     defineMicroStoreOp('Stfp', code='Mem = FpData_uqw;', is_float=True)
+    defineMicroStoreOp('Ntstfp', code='Mem = FpData_uqw;', is_float=True,
+                       mem_flags="Request::UNCACHEABLE | Request::NO_TSO")
 
     defineMicroStoreOp('Stfp87', code='''
         switch (dataSize)
@@ -666,9 +670,10 @@ let {{
                        has_data=False)
     defineMicroStoreOp('Clflushopt', 'Mem = 0;',
                        mem_flags="Request::CLEAN | Request::INVALIDATE" +
-                       " | Request::DST_POC", has_data=False)
+                       " | Request::NO_TSO | Request::DST_POC", has_data=False)
     defineMicroStoreOp('Clwb', 'Mem = 0;', has_data=False,
-                       mem_flags="Request::CLEAN | Request::DST_POC")
+                       mem_flags="Request::CLEAN | Request::DST_POC " +
+                       " | Request::NO_TSO")
 
     def defineMicroStoreSplitOp(mnemonic, code,
                                 completeCode="", mem_flags="0"):

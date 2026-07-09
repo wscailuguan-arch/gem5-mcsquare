@@ -38,3 +38,12 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+__pycache__/
+
+# MCSquare artifact: bulk / generated data, never committed.
+# os/ holds the 67GB disk image + kernels; fetch from zenodo record 11479488.
+/mcsquare/os/
+/mcsquare/results/
+/mcsquare/figures/
+/compile_commands.json
+/src/cpu/kvm/base.cc.bak

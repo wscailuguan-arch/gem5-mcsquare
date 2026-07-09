@@ -159,7 +159,7 @@
             0x4: BasicOperate::gem5Op({{
                 uint64_t result;
                 bool recognized = pseudo_inst::pseudoInst<X86PseudoInstABI>(
-                        xc->tcBase(), IMMEDIATE, result);
+                        xc->tcBase(), IMMEDIATE, result, xc);
                 Rax = result;
                 if (!recognized)
                     fault = std::make_shared<InvalidOpcode>();
@@ -190,9 +190,32 @@
         0x01: decode OPCODE_OP_BOTTOM3 {
             0x0: invd(); // privileged
             0x1: wbinvd(); // privileged
-            0x2: Inst::UD2();
+            0x2: BasicMemInst::memElideMacroOp({{
+                Fault f;
+                if(Rsi != NULL) {
+                    DPRINTF(PseudoInst, "memcpy_elide(dest = 0x%lx, src = 0x%lx, "
+                        "len = %ld)\n", Rdi, Rsi, Rdx);
+                    f = xc->writeMem((uint8_t*)Rsi, Rdx, Rdi,
+                        Request::MEM_ELIDE | Request::NO_TSO | Request::UNCACHEABLE,
+                        NULL, std::vector<bool>(Rdx, true));
+                } else {
+                    DPRINTF(PseudoInst, "memcpy_elide_free(dest = 0x%lx, len = %ld)\n", Rdi, Rdx);
+                    f = xc->writeMem(NULL, Rdx, Rdi,
+                        Request::MEM_ELIDE_FREE | Request::NO_TSO | Request::UNCACHEABLE,
+                        NULL, std::vector<bool>(Rdx, true));
+                }
+                if(f != NoFault)
+                    DPRINTF(PseudoInst, "pseudo_inst::memcpy_elide fault: %s\n", f->name());
+                return f;
+            }}, IsStore);
             0x3: Inst::UD2();
-            0x4: Inst::UD2();
+            0x4: BasicMemInst::memElideOp({{
+                bool recognized = true;
+                recognized = pseudo_inst::MemElideInst<X86PseudoInstABI>(
+                    xc->tcBase(), IMMEDIATE, fault, xc);
+                if (!recognized)
+                    fault = std::make_shared<InvalidOpcode>();
+            }}, IsNonSpeculative, IsStore);
             0x5: Inst::PREFETCH(Mb);
             0x6: FailUnimpl::femms();
             0x7: decode IMMEDIATE {

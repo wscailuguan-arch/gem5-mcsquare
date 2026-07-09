@@ -1,0 +1,32 @@
+set pagination off
+set print pretty on
+handle SIGALRM nostop noprint pass
+handle SIGCHLD nostop noprint pass
+run
+echo \n\n========== CRASH CONTEXT ==========\n
+bt
+python
+import gdb
+f = gdb.newest_frame()
+while f is not None and 'sortInsts' not in str(f.name()):
+    f = f.older()
+if f is not None:
+    f.select()
+    print('\n[selected sortInsts frame ok]', f.name())
+else:
+    print('\n[sortInsts frame NOT found]')
+end
+echo \n---info locals---\n
+info locals
+echo \n---insts_from_fetch---\n
+p insts_from_fetch
+echo \n---loop index i---\n
+p i
+echo \n---fromFetch wire ptr---\n
+p fromFetch
+echo \n---*fromFetch (size + insts[] array)---\n
+p *fromFetch
+echo \n---this (Decode stage)---\n
+p this
+echo \n========== END CONTEXT ==========\n
+quit

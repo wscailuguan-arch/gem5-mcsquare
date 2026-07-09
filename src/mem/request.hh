@@ -101,6 +101,12 @@ class Request : public Extensible<Request>
     typedef uint8_t ArchFlagsType;
     typedef gem5::Flags<FlagsType> Flags;
 
+    // MCSquare: source/destination virtual & physical addresses
+    Addr _vaddr_src = MaxAddr;
+    Addr _vaddr_dest = MaxAddr;
+    Addr _paddr_src = 0;
+    Addr _paddr_dest = 0;
+
     enum : FlagsType
     {
         // clang-format off
@@ -136,6 +142,19 @@ class Request : public Extensible<Request>
         STRICT_ORDER                = 0x00000800,
         /** This request is made in privileged mode. */
         PRIVILEGED                  = 0x00008000,
+
+        /**
+         * MCSquare lazy-memcpy flags. NOTE: values reassigned for gem5 v25
+         * to avoid collisions (22.1 values collided with KERNEL/ACQUIRE_PC/
+         * ACQUIRE/RELEASE). Verify against the enum if rebasing.
+         */
+        MEM_ELIDE                   = 0x0000000800000000,
+        MEM_ELIDE_FREE              = 0x0000004000000000,
+        MEM_ELIDE_REDIRECT_SRC      = 0x0000000000004000,
+        MEM_ELIDE_WRITE_DEST        = 0x0000008000000000,
+        MEM_ELIDE_WRITE_SRC         = 0x0002000000000000,
+        MEM_ELIDE_DEST_WB           = 0x0000000008000000,
+        NO_TSO                      = 0x0000000400000000,
 
         /**
          * This is a write that is targeted and zeroing an entire
@@ -609,6 +628,13 @@ class Request : public Extensible<Request>
     {
         _paddr = paddr;
         privateFlags.set(VALID_PADDR);
+    }
+
+    /** MCSquare: set just the virtual address. */
+    void
+    setVaddr(Addr vaddr)
+    {
+        _vaddr = vaddr;
     }
 
     /**
@@ -1135,6 +1161,7 @@ class Request : public Extensible<Request>
     bool isCacheClean() const { return _flags.isSet(CLEAN); }
     bool isCacheInvalidate() const { return _flags.isSet(INVALIDATE); }
     bool isCacheMaintenance() const { return _flags.isSet(CLEAN|INVALIDATE); }
+    bool isSkipTSO() const { return _flags.isSet(NO_TSO); }
     /** @} */
 
     void

@@ -39,6 +39,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from m5.citations import add_citation
+from m5.objects.MCSquare import MCSquare
 from m5.objects.QoSMemCtrl import *
 from m5.params import *
 from m5.proxy import *
@@ -101,6 +102,8 @@ class MemCtrl(QoSMemCtrl):
 
     command_window = Param.Latency("10ns", "Static backend latency")
     disable_sanity_check = Param.Bool(False, "Disable port resp Q size check")
+
+    mcsquare = Param.MCSquare(MCSquare(), "Memcpy elision handler")
 
 
 add_citation(

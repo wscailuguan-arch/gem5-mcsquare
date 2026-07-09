@@ -297,6 +297,12 @@ class Packet : public Printable, public Extensible<Packet>
     typedef uint32_t FlagsType;
     typedef gem5::Flags<FlagsType> Flags;
 
+    // MCSquare: bounce/copy bookkeeping (cacheline offsets & size)
+    uint64_t mc_size = -1;
+    uint64_t mc_src_offset = -1;
+    uint64_t mc_dest_offset = -1;
+    uint64_t mc_right_offset = -1;
+
   private:
     enum : FlagsType
     {
@@ -1290,12 +1296,19 @@ class Packet : public Printable, public Extensible<Packet>
      * Copy data into the packet from the provided pointer.
      */
     void
-    setData(const uint8_t *p)
+    setData(const uint8_t *p, uint64_t start_dest = 0,
+            uint64_t start_src = 0, uint64_t size = 0)
     {
         // we should never be copying data onto itself, which means we
         // must idenfity packets with static data, as they carry the
         // same pointer from source to destination and back
         assert(p != getPtr<uint8_t>() || flags.isSet(STATIC_DATA));
+
+        // MCSquare: partial copy at given source/destination offsets
+        if (start_src != 0 || start_dest != 0 || size != 0) {
+            std::memcpy(getPtr<uint8_t>() + start_dest, p + start_src, size);
+            return;
+        }
 
         if (p != getPtr<uint8_t>()) {
             // for packet with allocated dynamic data, we copy data from

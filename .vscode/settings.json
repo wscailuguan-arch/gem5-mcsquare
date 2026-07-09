@@ -40,5 +40,6 @@
             "label": "[gem5] All open Issues",
             "query": "state:open repo:${owner}/${repository} sort:updated-desc"
         }
-    ]
+    ],
+    "cmake.sourceDirectory": "/home/whx123456/gem5-latest/ext/pybind11/tests/test_cmake_build/installed_target"
 }

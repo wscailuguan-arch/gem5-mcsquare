@@ -393,7 +393,7 @@ class LSQ
         const RequestPtr req(int idx = 0) const { return _reqs.at(idx); }
 
         Addr getVaddr(int idx = 0) const { return req(idx)->getVaddr(); }
-        virtual void initiateTranslation() = 0;
+        virtual void initiateTranslation(uint64_t *src = NULL) = 0;
 
         PacketPtr packet(int idx = 0) { return _packets.at(idx); }
 
@@ -608,7 +608,7 @@ class LSQ
 
         virtual ~SingleDataRequest() {}
         virtual void markAsStaleTranslation();
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
         virtual bool recvTimingResp(PacketPtr pkt);
@@ -630,7 +630,7 @@ class LSQ
         UnsquashableDirectRequest(LSQUnit* port, const DynInstPtr& inst,
                 const Request::Flags& flags_);
         inline virtual ~UnsquashableDirectRequest() {}
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void markAsStaleTranslation();
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
@@ -677,7 +677,7 @@ class LSQ
         virtual void finish(const Fault &fault, const RequestPtr &req,
                 gem5::ThreadContext* tc, BaseMMU::Mode mode);
         virtual bool recvTimingResp(PacketPtr pkt);
-        virtual void initiateTranslation();
+        virtual void initiateTranslation(uint64_t *src = NULL);
         virtual void sendPacketToCache();
         virtual void buildPackets();
 
@@ -688,6 +688,40 @@ class LSQ
         virtual RequestPtr mainReq();
         virtual PacketPtr mainPacket();
         virtual std::string name() const { return "SplitDataRequest"; }
+    };
+
+    class MemElideRequest : public LSQRequest
+    {
+      protected:
+        uint32_t numFragments;
+        uint32_t numReceivedPackets;
+
+      public:
+        MemElideRequest(LSQUnit* port, const DynInstPtr& inst,
+                bool isLoad, const Addr& addr, const uint32_t& size,
+                const Request::Flags & flags_, PacketDataPtr data=nullptr,
+                uint64_t* res=nullptr) :
+            LSQRequest(port, inst, isLoad, addr, size, flags_, data, res,
+                       nullptr),
+            numFragments(0),
+            numReceivedPackets(0)
+        {
+            flags.set(Flag::IsSplit);
+        }
+        virtual ~MemElideRequest() {}
+        virtual void markAsStaleTranslation();
+        virtual void finish(const Fault &fault, const RequestPtr &req,
+                gem5::ThreadContext* tc, BaseMMU::Mode mode);
+        virtual bool recvTimingResp(PacketPtr pkt);
+        virtual void initiateTranslation(uint64_t *src = NULL);
+        virtual void sendPacketToCache();
+        virtual void buildPackets();
+
+        virtual Cycles handleLocalAccess(
+                gem5::ThreadContext *thread, PacketPtr pkt);
+        virtual bool isCacheBlockHit(Addr blockAddr, Addr cacheBlockMask);
+        virtual RequestPtr mainReq();
+        virtual std::string name() const { return "MemElideRequest"; }
     };
 
     /** Constructs an LSQ with the given parameters. */

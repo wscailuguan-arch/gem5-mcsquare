@@ -536,22 +536,34 @@ TimingSimpleCPU::writeMem(uint8_t *data, unsigned size,
     unsigned block_size = cacheLineSize();
     BaseMMU::Mode mode = BaseMMU::Write;
 
-    if (data == NULL) {
-        assert(flags & Request::STORE_NO_DATA);
-        // This must be a cache block cleaning request
-        memset(newData, 0, size);
-    } else {
-        memcpy(newData, data, size);
-    }
+    if(!(flags & Request::MEM_ELIDE || flags & Request::MEM_ELIDE_FREE)) {
+        if (data == NULL) {
+            assert(flags & Request::STORE_NO_DATA);
+            // This must be a cache block cleaning request
+            memset(newData, 0, size);
+        } else {
+            memcpy(newData, data, size);
+        }
 
-    if (traceData)
-        traceData->setMem(addr, size, flags);
+        if (traceData)
+            traceData->setMem(addr, size, flags);
+    }
 
     RequestPtr req = std::make_shared<Request>(
         addr, size, flags, dataRequestorId(), pc, thread->contextId());
     req->setByteEnable(byte_enable);
 
     req->taskId(taskId());
+
+    if(flags & Request::MEM_ELIDE || flags & Request::MEM_ELIDE_FREE) {
+        WholeTranslationState *state =
+            new WholeTranslationState(req, newData, res, mode);
+        DataTranslation<TimingSimpleCPU *> *translation =
+            new DataTranslation<TimingSimpleCPU *>(this, state);
+        req->_vaddr_src = (Addr)data;
+        thread->mmu->translateTiming(req, thread->getTC(), translation, mode);
+        return NoFault;
+    }
 
     Addr split_addr = roundDown(addr + size - 1, block_size);
     assert(split_addr <= addr || split_addr - addr < block_size);

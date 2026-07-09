@@ -59,6 +59,7 @@
 #include "mem/qport.hh"
 #include "params/MemCtrl.hh"
 #include "sim/eventq.hh"
+#include "mcsquare.h"
 
 namespace gem5
 {
@@ -292,6 +293,13 @@ class MemCtrl : public qos::MemCtrl
      */
     bool retryRdReq;
     bool retryWrReq;
+    bool srcWritePause;
+
+    /**
+     * Check whether the incoming MCSquare request
+     * violates ongoing operations in the memctrl.
+     */
+    bool canHandleMCPkt(PacketPtr pkt, bool &canHandle);
 
     /**
      * Bunch of things requires to setup "events" in gem5
@@ -779,6 +787,8 @@ class MemCtrl : public qos::MemCtrl
     virtual void startup() override;
     virtual void drainResume() override;
 
+    MCSquare *mcsquare;
+
   protected:
 
     virtual Tick recvAtomic(PacketPtr pkt);
@@ -787,6 +797,9 @@ class MemCtrl : public qos::MemCtrl
     virtual void recvMemBackdoorReq(const MemBackdoorReq &req,
             MemBackdoorPtr &backdoor);
     virtual bool recvTimingReq(PacketPtr pkt);
+
+    void checkBounceTable();
+    void clearCTT();
 
     bool recvFunctionalLogic(PacketPtr pkt, MemInterface* mem_intr);
     Tick recvAtomicLogic(PacketPtr pkt, MemInterface* mem_intr);
