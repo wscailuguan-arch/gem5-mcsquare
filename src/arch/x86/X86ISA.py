@@ -42,17 +42,22 @@ class X86ISA(BaseISA):
     cxx_class = "gem5::X86ISA::ISA"
     cxx_header = "arch/x86/isa.hh"
 
-    # Here we set the default vector string to "HygonGenuine". Previously this
-    # "M5 Simulator" but due to stricter checks in newer versions of GLIBC,
-    # the CPUID is checked for the required features. As "M5 Simulator" is not
-    # genuine CPUID, an error is returned. This change
-    # https://gem5-review.googlesource.com/c/public/gem5/+/64831 changed this
-    # to "GenuineAMD" but due to issues with booting the Linux Kernel using
-    # this vector string (highlighted here:
-    # https://gem5.atlassian.net/browse/GEM5-1300) we opted to use
-    # "HygonGenuine" instead.
+    # Upstream gem5 defaults this to "HygonGenuine": "M5 Simulator" is not a
+    # genuine CPUID vendor and newer GLIBC rejects it. (Upstream first tried
+    # "GenuineAMD", https://gem5-review.googlesource.com/c/public/gem5/+/64831,
+    # then settled on "HygonGenuine" over a kernel boot issue, GEM5-1300.)
+    #
+    # MCSquare needs "M5 Simulator" back. The artifact's disk image boots via
+    # /sbin/gem5init, which decides whether it is running under gem5 by string-
+    # comparing /proc/cpuinfo's vendor_id against exactly "M5 Simulator". On any
+    # other value it prints "Not in gem5. Not loading script" and exits without
+    # running the script delivered by --script; the guest then idles forever and
+    # never executes an m5 pseudo-instruction, so `m5 exit` never fires and the
+    # KVM->O3 switch never happens. ("HygonGenuine" also makes Linux take the
+    # AMD PMU path and fail on MSR 0xc0010007.) The guest is Ubuntu 20.04
+    # (glibc 2.31), which predates the strict CPUID check, so this is safe.
     vendor_string = Param.String(
-        "HygonGenuine", "Vendor string for CPUID instruction"
+        "M5 Simulator", "Vendor string for CPUID instruction"
     )
     name_string = Param.String(
         "Fake gem5 x86_64 CPU", "Processor name for CPUID instruction"
