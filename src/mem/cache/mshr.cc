@@ -424,10 +424,14 @@ MSHR::handleSnoop(PacketPtr pkt, Counter _order)
     // when we snoop packets the needsWritable and isInvalidate flags
     // should always be the same, however, this assumes that we never
     // snoop writes as they are currently not marked as invalidations
-    panic_if((pkt->needsWritable() != pkt->isInvalidate()) &&
-             !pkt->req->isCacheMaintenance(),
-             "%s got snoop %s where needsWritable, "
-             "does not match isInvalidate", name(), pkt->print());
+    // MCSquare (artifact): this trips for non-temporal stores. Downgrade the
+    // panic to a log line so Fig 17's NTStore configuration can run.
+    if ((pkt->needsWritable() != pkt->isInvalidate()) &&
+        !pkt->req->isCacheMaintenance()) {
+        fprintf(stderr, "%s got snoop %s where needsWritable "
+                "does not match isInvalidate\n",
+                name().c_str(), pkt->print().c_str());
+    }
 
     if (!inService || (pkt->isExpressSnoop() && downstreamPending)) {
         // Request has not been issued yet, or it's been issued
