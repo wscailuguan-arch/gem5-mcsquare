@@ -161,6 +161,7 @@ int main(int argc, char *argv[])
     test1 = (uint64_t*)((uint64_t)test1 + 16);
     printf(\"%p\n\", test1);
     printf(\"%p\n\", test2);
+    TEST_OP(memcpy_elide_clwb, test2, test1, size / 256, ACCESSES / 256);
     TEST_OP(memcpy_elide_clwb, test2, test1, size / 64, ACCESSES / 64);
     TEST_OP(memcpy_elide_clwb, test2, test1, size / 16, ACCESSES / 16);
     TEST_OP(memcpy_elide_clwb, test2, test1, size / 4, ACCESSES / 4);
