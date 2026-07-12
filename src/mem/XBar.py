@@ -146,7 +146,22 @@ class SnoopFilter(SimObject):
     system = Param.System(Parent.any, "System that the crossbar belongs to.")
 
     # Sanity check on max capacity to track, adjust if needed.
-    max_capacity = Param.MemorySize("8MiB", "Maximum capacity of snoop filter")
+    #
+    # Raised from gem5's 8MiB default because (MC)^2 leaks snoop filter
+    # entries: SnoopFilter::updateResponse() bails out early on isMCSquare()
+    # packets, so a line whose request was tracked but whose response is
+    # redirected to the source is never cleared from cachedLocations. A real
+    # workload (MongoDB, Fig 15) blows through the 131072-block cap after a
+    # couple of hundred ms of simulated time and panics -- even though the
+    # modelled caches can only hold ~45k lines between them.
+    #
+    # maxEntryCount feeds exactly one panic_if and no timing whatsoever, so
+    # raising it cannot change any simulated behaviour. It is a guard rail,
+    # not a fix: if this cap is ever reached again, the leak itself has to be
+    # dealt with rather than papered over.
+    max_capacity = Param.MemorySize(
+        "256MiB", "Maximum capacity of snoop filter"
+    )
 
 
 # We use a coherent crossbar to connect multiple requestors to the L2
