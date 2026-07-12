@@ -164,6 +164,17 @@ class BaseXBar : public ClockedObject
          */
         void recvRetry();
 
+        /**
+         * Is this layer waiting for a retry from the peer it last failed
+         * to forward a packet to?
+         *
+         * (MC)^2 issues requests from CoherentXBar::recvTimingResp(), which
+         * bypasses the layer entirely, so a retry arriving on a memory-side
+         * port no longer implies that the layer is waiting for one and
+         * recvRetry()'s assertion would fire.
+         */
+        bool waitingForRetry() const { return waitingForPeer != NULL; }
+
       protected:
 
         /**

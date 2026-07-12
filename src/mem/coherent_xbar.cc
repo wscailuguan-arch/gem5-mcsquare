@@ -531,9 +531,6 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
             pkt->req->clearFlags(Request::MEM_ELIDE_REDIRECT_SRC);
         }
 
-        // store the old header delay so we can restore it if needed
-        Tick old_header_delay = pkt->headerDelay;
-
         // a request sees the frontend and forward latency
         Tick xbar_delay = (frontendLatency + forwardLatency) * clockPeriod();
 
@@ -557,11 +554,17 @@ CoherentXBar::recvTimingResp(PacketPtr pkt, PortID mem_side_port_id)
             DPRINTF(MCSquare, "Found bounce packet for dest %lx, read? %d, "
                     "write? %d, addr %lx\n", pkt->req->_paddr_dest,
                     pkt->isRead(), pkt->isWrite(), pkt->getAddr());
-            // TODO_AK: Deal with this case.
-            assert(false);
-            pkt->headerDelay = old_header_delay;
+            // The destination memory controller is full. We cannot push back
+            // on the responder: the CTT broadcast above has already been sent
+            // to the other memory controllers, so replaying this response
+            // would apply it twice. Take ownership of the packet instead and
+            // resend it from recvReqRetry() once the destination frees up.
+            // Keep the timing computed above; it is not recomputed on resend.
+            bounceRetryPkts[mem_side_port_id_new].push_back(pkt);
         }
-        return success;
+        // Either way the response has been consumed by the crossbar, exactly
+        // as in the MEM_ELIDE_DEST_WB case above.
+        return true;
     }
 
     // determine the destination
@@ -842,10 +845,28 @@ CoherentXBar::forwardTiming(PacketPtr pkt, PortID exclude_cpu_side_port_id,
 void
 CoherentXBar::recvReqRetry(PortID mem_side_port_id)
 {
-    // responses and snoop responses never block on forwarding them,
-    // so the retry will always be coming from a port to which we
-    // tried to forward a request
-    reqLayers[mem_side_port_id]->recvRetry();
+    // (MC)^2 breaks the invariant this function used to rely on ("responses
+    // never block on forwarding them"): recvTimingResp() forwards bounce
+    // packets as requests, bypassing the request layer. So a retry arriving
+    // here may be owed to a bounce packet, to the layer, or to both.
+    auto it = bounceRetryPkts.find(mem_side_port_id);
+    if (it != bounceRetryPkts.end()) {
+        while (!it->second.empty()) {
+            PacketPtr pkt = it->second.front();
+            if (!memSidePorts[mem_side_port_id]->sendTimingReq(pkt)) {
+                // Destination filled up again; it will retry us once more.
+                return;
+            }
+            DPRINTF(MCSquare, "Resent bounce packet for addr %lx\n",
+                    pkt->getAddr());
+            it->second.pop_front();
+        }
+    }
+
+    // Only hand the retry to the layer if it is genuinely waiting for one;
+    // recvRetry() asserts on waitingForPeer otherwise.
+    if (reqLayers[mem_side_port_id]->waitingForRetry())
+        reqLayers[mem_side_port_id]->recvRetry();
 }
 
 Tick

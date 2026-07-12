@@ -46,6 +46,7 @@
 #ifndef __MEM_COHERENT_XBAR_HH__
 #define __MEM_COHERENT_XBAR_HH__
 
+#include <deque>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -80,6 +81,17 @@ class CoherentXBar : public BaseXBar
     std::vector<ReqLayer*> reqLayers;
     std::vector<RespLayer*> respLayers;
     std::vector<SnoopRespLayer*> snoopLayers;
+
+    /**
+     * (MC)^2 bounce packets a memory controller refused, keyed by the
+     * destination memory-side port. recvTimingResp() turns a redirected
+     * read/write response into a request; when the destination is full there
+     * is nowhere to push back to, so the crossbar takes ownership of the
+     * packet and resends it from recvReqRetry(). The upstream artifact left
+     * this case unhandled (`TODO_AK` + `assert(false)`), which aborts any
+     * long-running (MC)^2 workload that congests the memory controllers.
+     */
+    std::unordered_map<PortID, std::deque<PacketPtr>> bounceRetryPkts;
 
     /**
      * Declaration of the coherent crossbar CPU-side port type, one will
