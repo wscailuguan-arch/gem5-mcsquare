@@ -5,6 +5,10 @@ GEM5_CPU ?= O3CPU
 GEM5_KERNEL ?= ./os/vmlinux-5.7
 GEM5_TESTS ?= micro/rand-access micro/seq-access#seq-access #rand-access #multi-test##script# #seq-access 
 RESULTS ?= ./results
+GEM5_BIN ?= ../build/X86/gem5.opt
+DBG ?= PseudoInst
+GEM5_BIN ?= ../build/X86/gem5.opt
+DBG ?= PseudoInst
 FIGURES ?= ./figures
 
 # Default command. Compile GEM5.
@@ -77,7 +81,7 @@ SCRIPT ?= ./scripts/${TEST}-run.sh
 single_launch_gem5:
 	mkdir -p ${RESULTS}/${TEST};
 	mkdir -p ${FIGURES};
-	sudo ../build/X86/gem5.opt --debug-flags=PseudoInst -d ${RESULTS}/${TEST} ./fs.py \
+	sudo ${GEM5_BIN} --debug-flags=${DBG} -d ${RESULTS}/${TEST} ./fs.py \
 		--fast-forward=1000000000000000000 --mem-size=${MEM_SIZE} --cpu-type=${GEM5_CPU} \
 		--l1i-hwp-type=StridePrefetcher ${PREFETCH} --command-line=${CMD_LINE} --ctt-size=${CTT_SIZE} \
 		--ctt-frac=${CTT_FRAC} --ctt-lat=${CTT_LAT} --cpu-clock="4GHz" --mem-type="DDR4_2400_8x8" --bpq-size=${BPQ_SIZE} \

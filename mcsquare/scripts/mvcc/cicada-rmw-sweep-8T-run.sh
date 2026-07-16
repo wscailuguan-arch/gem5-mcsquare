@@ -28,7 +28,7 @@ echo "Setup complete"
 sleep 5
 m5 exit
 
-for i in 0.0625 0.125; do
+for i in 0.0625; do
     m5 resetstats
     ./test_tx ${ROWS} 4 0.5 0 ${TX} ${THREADS} ${i} 2 ${ROW_SIZE}
     m5 dumpstats

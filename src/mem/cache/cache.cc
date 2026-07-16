@@ -1345,10 +1345,14 @@ Cache::recvTimingSnoopReq(PacketPtr pkt)
         // the difference being that instead of querying the block
         // state to determine if it is dirty and writable, we use the
         // command and fields of the writeback packet
+        // Cache maintenance ops (x86 clwb -> CleanSharedReq, clflushopt ->
+        // CleanInvalidReq) are answered by the destination xbar, never by a
+        // cache, and must never discard a pending dirty writeback: the response
+        // carries no data, so the dirty line would be lost outright.
         bool respond = wb_pkt->cmd == MemCmd::WritebackDirty &&
-            pkt->needsResponse();
+            pkt->needsResponse() && !pkt->isClean();
         bool have_writable = !wb_pkt->hasSharers();
-        bool invalidate = pkt->isInvalidate();
+        bool invalidate = pkt->isInvalidate() && !pkt->isClean();
 
         if (!pkt->req->isUncacheable() && pkt->isRead() && !invalidate) {
             assert(!pkt->needsWritable());

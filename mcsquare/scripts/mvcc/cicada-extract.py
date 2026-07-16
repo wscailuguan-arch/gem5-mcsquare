@@ -19,7 +19,7 @@ import sys
 	done;
 '''
 def extract_thput(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
         data = file.readlines()
 
     # Dictionary to hold throughput

@@ -1,7 +1,7 @@
 import re
 import sys
 def extract_thput(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
         data = file.readlines()
 
     # Dictionary to hold throughput
@@ -16,7 +16,7 @@ def extract_thput(file_path):
     return thput
 
 def extract_stalls(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
         data = file.readlines()
 
     # Dictionary to hold stalls
@@ -36,7 +36,7 @@ def extract_stalls(file_path):
     return stalls
 
 def extract_membw(file_path):
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as file:
         data = file.readlines()
 
     bw_util = []
